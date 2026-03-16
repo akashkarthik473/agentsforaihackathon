@@ -5,8 +5,8 @@ Supports mock mode (USE_MOCKS=True) for development without demo_repo/.
 
 import os
 
-USE_MOCKS = True
-DEMO_REPO_PATH = os.path.join(os.path.dirname(__file__), "demo_repo")
+USE_MOCKS = False
+DEMO_REPO_PATH = os.path.join(os.path.dirname(__file__), "..", "demo_repo")
 
 # ---------------------------------------------------------------------------
 # Mock data
