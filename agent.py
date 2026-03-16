@@ -4,7 +4,7 @@ Uses NVIDIA NIM / Nemotron via the OpenAI-compatible SDK.
 """
 
 import json
-import os
+import os, streamlit as st
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -18,7 +18,7 @@ load_dotenv()
 
 client = OpenAI(
     base_url="https://integrate.api.nvidia.com/v1",
-    api_key=os.environ.get("NVIDIA_API_KEY", ""),
+    api_key = os.environ.get("NVIDIA_API_KEY") or st.secrets.get("NVIDIA_API_KEY", "")
 )
 
 MODEL = "nvidia/nemotron-3-super-120b-a12b"
