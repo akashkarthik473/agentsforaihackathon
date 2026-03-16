@@ -90,18 +90,20 @@ with chat_col:
     # Display existing messages
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
-            # Tool calls get shown in an expander
             if msg.get("tool_calls"):
-                with st.expander("🔍 Agent reasoning", expanded=False):
+                with st.expander("Agent reasoning", expanded=False):
                     for tc in msg["tool_calls"]:
-                        st.markdown(f"**{tc['tool']}**(`{tc.get('args', '')}`)")
-                        if tc.get("result"):
-                            st.code(tc["result"][:500], language="text")
+                        args_str = ", ".join(
+                            f"{k}={v}" for k, v in tc["args"].items()
+                        ) if tc["args"] else ""
+                        st.markdown(f"**{tc['tool']}**({args_str})")
+                        if tc.get("result_preview"):
+                            st.code(tc["result_preview"], language="text")
             st.markdown(msg["content"])
 
     # Start investigation button (only shown before first run)
     if not st.session_state.investigation_started:
-        if st.button("🚀 Investigate Failure", type="primary", use_container_width=True):
+        if st.button("Investigate Failure", type="primary", use_container_width=True):
             st.session_state.investigation_started = True
 
             prompt = (
@@ -111,79 +113,33 @@ with chat_col:
                 "Use repository tools to inspect the codebase before answering."
             )
 
-            # Add user message
             st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
 
-            # Run agent
             with st.chat_message("assistant"):
-                thinking_container = st.expander("🔍 Agent reasoning", expanded=True)
+                thinking_container = st.expander("Agent reasoning", expanded=True)
                 answer_container = st.empty()
 
-                try:
+                with st.spinner("Agent is analyzing the repository..."):
                     from agent import run_agent
+                    result = run_agent(prompt)
 
-                    tool_calls_display = []
-                    final_answer = ""
+                # Show tool calls in the thinking expander
+                for tc in result["tool_log"]:
+                    with thinking_container:
+                        args_str = ", ".join(
+                            f"{k}={v}" for k, v in tc["args"].items()
+                        ) if tc["args"] else ""
+                        st.markdown(f"**{tc['tool']}**({args_str})")
+                        if tc.get("result_preview"):
+                            st.code(tc["result_preview"], language="text")
 
-                    with st.spinner("Agent is analyzing the repository..."):
-                        for event in run_agent(prompt):
-                            if event["type"] == "tool_call":
-                                tool_calls_display.append(event)
-                                with thinking_container:
-                                    st.markdown(
-                                        f"**{event['tool']}**(`{event.get('args', '')}`)"
-                                    )
-                                    if event.get("result"):
-                                        st.code(
-                                            event["result"][:500], language="text"
-                                        )
-                            elif event["type"] == "thinking":
-                                with thinking_container:
-                                    st.markdown(f"💭 {event['content']}")
-                            elif event["type"] == "answer":
-                                final_answer = event["content"]
+                answer_container.markdown(result["report"])
 
-                    answer_container.markdown(final_answer)
-                    st.session_state.messages.append(
-                        {
-                            "role": "assistant",
-                            "content": final_answer,
-                            "tool_calls": tool_calls_display,
-                        }
-                    )
-
-                except ImportError:
-                    # Agent not ready yet — use mock
-                    from mock_agent import run_mock_agent
-
-                    tool_calls_display = []
-                    final_answer = ""
-
-                    for event in run_mock_agent():
-                        if event["type"] == "tool_call":
-                            tool_calls_display.append(event)
-                            with thinking_container:
-                                st.markdown(
-                                    f"**{event['tool']}**(`{event.get('args', '')}`)"
-                                )
-                                if event.get("result"):
-                                    st.code(event["result"][:500], language="text")
-                        elif event["type"] == "thinking":
-                            with thinking_container:
-                                st.markdown(f"💭 {event['content']}")
-                        elif event["type"] == "answer":
-                            final_answer = event["content"]
-
-                    answer_container.markdown(final_answer)
-                    st.session_state.messages.append(
-                        {
-                            "role": "assistant",
-                            "content": final_answer,
-                            "tool_calls": tool_calls_display,
-                        }
-                    )
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": result["report"],
+                    "tool_calls": result["tool_log"],
+                })
 
             st.rerun()
 

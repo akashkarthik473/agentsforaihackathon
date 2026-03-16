@@ -8,9 +8,9 @@ import os
 
 from dotenv import load_dotenv
 from openai import OpenAI
-from tools import list_repo_files, read_file, search_repo
+from tools import call_tool, TOOL_DEFINITIONS
 
-load_dotenv()  # Load .env file
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Client setup
@@ -25,73 +25,6 @@ MODEL = "nvidia/nemotron-3-super-120b-a12b"
 MAX_ITERATIONS = 8
 
 # ---------------------------------------------------------------------------
-# Tool schemas (OpenAI function-calling format)
-# ---------------------------------------------------------------------------
-
-TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "list_repo_files",
-            "description": "List all files in the firmware repository. Call this first to understand what files are available.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "read_file",
-            "description": "Read the full contents of a file in the repository by its relative path.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Relative path to the file, e.g. 'safety_checker.c' or 'logs/fault_log.txt'.",
-                    }
-                },
-                "required": ["path"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_repo",
-            "description": "Case-insensitive substring search across all files in the repository. Returns matching filenames.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Search term to look for across all source files.",
-                    }
-                },
-                "required": ["query"],
-            },
-        },
-    },
-]
-
-# ---------------------------------------------------------------------------
-# Tool dispatcher
-# ---------------------------------------------------------------------------
-
-def _dispatch(name: str, args: dict) -> dict:
-    if name == "list_repo_files":
-        return list_repo_files()
-    elif name == "read_file":
-        return read_file(args.get("path", ""))
-    elif name == "search_repo":
-        return search_repo(args.get("query", ""))
-    else:
-        return {"error": f"Unknown tool: {name}"}
-
-# ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
 
@@ -101,9 +34,7 @@ You are an expert embedded-systems firmware engineer performing root-cause analy
 You will be given a bug ticket and fault log in the user message. Use the available tools to investigate the \
 repository and produce a structured triage report.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 INVESTIGATION PROCEDURE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Follow these steps in order:
 
 1. Call list_repo_files() first to understand what files exist.
@@ -114,29 +45,25 @@ Follow these steps in order:
 4. Read at least 3 source files before drawing any conclusions.
 5. Once you have concrete evidence from code and logs, write the final report.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 BEHAVIORAL RULES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - Be concrete, never vague. Write "safety_checker.c:safety_check_periodic() sets torque_inhibit = true" \
 not "somewhere in the safety module an inhibit is set".
 - Every claim must be backed by a specific log line or code location.
 - Prefer short, evidence-backed reasoning over lengthy explanation.
 - Name exact files and functions for every finding.
 - When the failure involves heartbeat/timeout/reconnect, always prioritize reading:
-  bms_interface.c → safety_checker.c → torque_controller.c
-- Keep the patch minimal and readable — only change what is necessary to fix the bug.
+  bms_interface.c -> safety_checker.c -> torque_controller.c
+- Keep the patch minimal and readable -- only change what is necessary to fix the bug.
 - Include a risk rating (Low / Medium / High) in the Regression Risks section.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OUTPUT FORMAT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Your final response MUST use exactly these markdown section headers, in this order:
 
 ## Summary
 One concise paragraph describing what fails, when it fails, and the observable symptom.
 
 ## Ranked Hypotheses
-2–4 numbered hypotheses, ranked most-to-least likely. For each, state:
+2-4 numbered hypotheses, ranked most-to-least likely. For each, state:
 - What the hypothesis is
 - Why the evidence supports or weakens it
 
@@ -152,12 +79,6 @@ Quote or paraphrase the relevant code.
 
 ## Minimal Patch
 A diff-style or pseudocode patch showing exactly what to add or change. Keep it short.
-Example format:
-```c
-// In bms_interface.c — bms_rx_callback()
-// After heartbeat recovery is detected:
-+ safety_clear_torque_inhibit();   // clear latch now that BMS is healthy
-```
 
 ## Regression Risks
 Bullet list of risks. Tag each as [Low], [Medium], or [High].
@@ -173,10 +94,10 @@ Concrete, numbered test scenarios. Each test must describe:
 # Main agent loop
 # ---------------------------------------------------------------------------
 
-def run_agent(user_prompt: str) -> dict:
+def run_agent(user_prompt: str):
     """
     Run the triage agent on the given prompt.
-    Returns {"report": str, "tool_log": list}.
+    Returns {"report": str, "tool_log": list[dict]}.
     """
     tool_log = []
 
@@ -189,7 +110,7 @@ def run_agent(user_prompt: str) -> dict:
         response = client.chat.completions.create(
             model=MODEL,
             messages=messages,
-            tools=TOOLS,
+            tools=TOOL_DEFINITIONS,
             tool_choice="auto",
             temperature=1.0,
             top_p=0.95,
@@ -213,8 +134,7 @@ def run_agent(user_prompt: str) -> dict:
             except json.JSONDecodeError:
                 args = {}
 
-            result = _dispatch(name, args)
-            result_str = json.dumps(result)
+            result_str = call_tool(name, args)
 
             # Log the tool call
             tool_log.append({
@@ -232,7 +152,7 @@ def run_agent(user_prompt: str) -> dict:
                 "content": result_str,
             })
 
-    # Exhausted iterations — ask model for best-effort report with what it has
+    # Exhausted iterations — ask model for best-effort report
     messages.append({
         "role": "user",
         "content": (
