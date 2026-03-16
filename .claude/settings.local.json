@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -:*)",
+      "Bash(pip show:*)",
+      "Bash(python -c \"from pypdf import PdfReader; print\\(''ok''\\)\")",
+      "Bash(where python:*)",
+      "Bash(pip list:*)",
+      "Bash(py -3.13 -c \"from pypdf import PdfReader; print\\(''ok''\\)\")",
+      "Bash(py -3.14 -c \"from pypdf import PdfReader; print\\(''ok''\\)\")",
+      "Bash(py -3.14:*)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/myste/Documents/projects/agentsforaihackathon/**)",
+      "Bash(done)"
+    ]
+  }
+}

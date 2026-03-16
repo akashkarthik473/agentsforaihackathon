@@ -1,0 +1,15 @@
+[10:21:14.100] INFO  torque_cmd_rx requested=42
+[10:21:14.110] INFO  torque_applied=42
+[10:21:14.112] INFO  motor_state=DRIVE
+[10:21:14.120] WARN  bms_heartbeat_timeout
+[10:21:14.121] WARN  safety torque_inhibit=1 reason=BMS_TIMEOUT
+[10:21:14.130] INFO  torque_applied=0
+[10:21:14.132] INFO  motor_state=FAULT
+[10:21:16.401] INFO  bms_heartbeat_restored
+[10:21:16.430] INFO  torque_cmd_rx requested=38
+[10:21:16.431] INFO  torque_applied=0
+[10:21:16.450] INFO  motor_state=DRIVE
+[10:21:18.500] INFO  torque_cmd_rx requested=40
+[10:21:18.501] INFO  torque_applied=0
+[10:21:20.600] INFO  torque_cmd_rx requested=35
+[10:21:20.601] INFO  torque_applied=0
