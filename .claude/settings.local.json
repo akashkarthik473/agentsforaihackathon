@@ -20,7 +20,9 @@
       "Bash(python -c \"import ast; ast.parse\\(open\\(''agent.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''agent.py OK''\\)\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\(''app.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''app.py OK''\\)\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\(''tools.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''tools.py OK''\\)\")",
-      "Bash(python -c \"from tools import call_tool, TOOL_DEFINITIONS; print\\(f''{len\\(TOOL_DEFINITIONS\\)} tools defined''\\); print\\(call_tool\\(''search_repo'', {''query'': ''torque_inhibit''}\\)[:100]\\)\")"
+      "Bash(python -c \"from tools import call_tool, TOOL_DEFINITIONS; print\\(f''{len\\(TOOL_DEFINITIONS\\)} tools defined''\\); print\\(call_tool\\(''search_repo'', {''query'': ''torque_inhibit''}\\)[:100]\\)\")",
+      "Bash(python:*)",
+      "Bash(pip install:*)"
     ]
   }
 }

@@ -124,7 +124,8 @@ def run_agent(user_prompt: str):
             return {"report": report, "tool_log": tool_log}
 
         # Append the assistant message (with tool_calls) to history
-        messages.append(message)
+        # Must be a plain dict — the Pydantic object causes SDK transform errors
+        messages.append(message.model_dump(exclude_unset=True))
 
         # Execute each tool call and collect results
         for tc in message.tool_calls:
