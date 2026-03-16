@@ -34,7 +34,7 @@ def read_file(path: str) -> str:
     target = DEMO_ROOT / path
     if not target.is_file():
         return f"Error: file not found: {path}"
-    return target.read_text()
+    return target.read_text(encoding="utf-8")
 
 
 def search_repo(query: str) -> str:
@@ -51,7 +51,7 @@ def search_repo(query: str) -> str:
         if not p.is_file():
             continue
         try:
-            for i, line in enumerate(p.read_text().splitlines(), start=1):
+            for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), start=1):
                 if query_lower in line.lower():
                     rel = str(p.relative_to(DEMO_ROOT))
                     results.append(f"{rel}:{i}: {line.strip()}")

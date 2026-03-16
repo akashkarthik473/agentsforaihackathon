@@ -118,10 +118,24 @@ def run_agent(user_prompt: str):
 
         message = response.choices[0].message
 
-        # If the model returned text with no tool calls, we're done
+        # If the model returned text with no tool calls, we're done.
+        # Guard against the model printing tool calls as raw text instead of
+        # using the API mechanism — if content looks like a tool call, keep looping.
         if not message.tool_calls:
-            report = message.content or ""
-            return {"report": report, "tool_log": tool_log}
+            content = message.content or ""
+            if "<tool_call>" in content or "<function=" in content:
+                # Model fell back to text-based tool call format — ignore and
+                # force it to write the report on the next pass
+                messages.append(message.model_dump(exclude_unset=True))
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "Stop calling tools and write the full triage report now "
+                        "using only what you have already read."
+                    ),
+                })
+                continue
+            return {"report": content, "tool_log": tool_log}
 
         # Append the assistant message (with tool_calls) to history
         # Must be a plain dict — the Pydantic object causes SDK transform errors
