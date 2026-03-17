@@ -7,6 +7,8 @@ import json
 import os
 from pathlib import Path
 
+import streamlit as st
+
 from dotenv import load_dotenv
 from openai import OpenAI
 from tools import call_tool, TOOL_DEFINITIONS
@@ -36,7 +38,7 @@ load_dotenv()
 
 client = OpenAI(
     base_url="https://integrate.api.nvidia.com/v1",
-    api_key=os.environ.get("NVIDIA_API_KEY", ""),
+    api_key = os.environ.get("NVIDIA_API_KEY") or st.secrets.get("NVIDIA_API_KEY", "")
 )
 
 MODEL = "nvidia/nemotron-3-super-120b-a12b"
