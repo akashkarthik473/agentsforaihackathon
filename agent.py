@@ -94,10 +94,11 @@ Concrete, numbered test scenarios. Each test must describe:
 # Main agent loop
 # ---------------------------------------------------------------------------
 
-def run_agent(user_prompt: str):
+def run_agent(user_prompt: str, on_tool_call=None):
     """
     Run the triage agent on the given prompt.
     Returns {"report": str, "tool_log": list[dict]}.
+    on_tool_call: optional callback(dict) fired immediately after each tool executes.
     """
     tool_log = []
 
@@ -152,11 +153,14 @@ def run_agent(user_prompt: str):
             result_str = call_tool(name, args)
 
             # Log the tool call
-            tool_log.append({
+            entry = {
                 "tool": name,
                 "args": args,
                 "result_preview": result_str[:200],
-            })
+            }
+            tool_log.append(entry)
+            if on_tool_call:
+                on_tool_call(entry)
 
             print(f"[iter {iteration+1}] tool={name} args={args}")
 
