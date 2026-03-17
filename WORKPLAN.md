@@ -64,11 +64,11 @@ A closes: "It reduces codebase archaeology and gives a new engineer a concrete f
 # Tasks
 - [x] Create CLAUDE_INSTRUCTIONS.md
 - [x] Create WORKPLAN.md
-- [ ] Create demo_repo C files (Person A)
-- [ ] Create ticket + log (Person A)
-- [ ] Create app.py UI shell (Person A)
-- [ ] Create tools.py (Person B)
-- [ ] Create agent.py (Person B)
-- [ ] Wire backend to UI (Together)
-- [ ] Test end-to-end (Together)
-- [ ] Polish + rehearse demo (Together)
+- [x] Create demo_repo C files (Person A)
+- [x] Create ticket + log (Person A)
+- [x] Create app.py UI shell (Person A)
+- [x] Create tools.py (Person B)
+- [x] Create agent.py (Person B)
+- [x] Wire backend to UI (Together)
+- [x] Test end-to-end (Together)
+- [x] Polish + rehearse demo (Together)

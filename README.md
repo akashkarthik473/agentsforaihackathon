@@ -1,10 +1,21 @@
 # Firmware Failure Triage Agent
 
-Embedded incident-response agent powered by NVIDIA Nemotron. Given an issue ticket and fault log, it reasons across a legacy C firmware codebase to identify root cause, trace the signal path, and propose a minimal patch.
+An AI-powered tool-calling agent that investigates legacy embedded C codebases to diagnose firmware failures. Given a bug ticket and fault log, it autonomously reads source files, traces signal paths across modules, and produces a structured triage report with root cause analysis, a minimal patch, and regression tests.
 
-## Demo scenario
+Built with **NVIDIA Nemotron** via **NVIDIA NIM** (OpenAI-compatible inference endpoint).
 
-After a BMS reconnect, torque commands are received but applied torque stays zero until reboot. The agent traces the bug across `bms_interface.c`, `safety_checker.c`, and `torque_controller.c`.
+## Demo Scenario
+
+> After BMS reconnect, torque commands are received but applied torque stays zero until reboot.
+
+The agent traces the bug across `bms_interface.c` → `safety_checker.c` → `torque_controller.c`, identifies a fault latch (`torque_inhibit`) that is set on BMS timeout but never cleared on heartbeat recovery, and proposes a two-line fix.
+
+## How It Works
+
+1. **Input** — Bug ticket + fault log (preloaded demo, file upload, or GitHub issue URL)
+2. **Investigation** — Agent uses 3 tools (`list_repo_files`, `read_file`, `search_repo`) to explore the codebase autonomously via tool calling
+3. **Output** — Structured report: summary, ranked hypotheses, root cause, evidence from logs & code, minimal patch, regression risks, validation tests
+4. **Apply Fix** — One-click patch application with diff visualization
 
 ## Setup
 
@@ -12,10 +23,10 @@ After a BMS reconnect, torque commands are received but applied torque stays zer
 pip install -r requirements.txt
 ```
 
-Set your NVIDIA NIM API key:
+Create a `.env` file with your NVIDIA NIM API key:
 
-```bash
-export NVIDIA_API_KEY=your_key_here
+```
+NVIDIA_API_KEY=nvapi-xxxxxxxxxx
 ```
 
 ## Run
@@ -24,21 +35,19 @@ export NVIDIA_API_KEY=your_key_here
 streamlit run app.py
 ```
 
-## Repo structure
+## Architecture
 
 ```
-demo_repo/          # Fake embedded C firmware (the codebase under investigation)
-  logs/             # Fault log
-  tickets/          # Issue ticket
-app.py              # Streamlit UI (Person A)
-agent.py            # Agent loop + tool calling (Person B)
-tools.py            # Repo tools: list, read, search (Person B)
-prompt.py           # System prompt (Person B)
+app.py              Streamlit UI — chat interface, file viewer, patch application
+agent.py            Tool-calling loop — max 8 iterations, structured report output
+tools.py            3 repository tools: list, read, search
+demo_repo/          Embedded C firmware codebase (10 files with planted bug)
+  tickets/          Bug ticket (TICKET-001)
+  logs/             Fault log
+test_agent.py       Consistency test — runs agent 5x, validates output
 ```
 
-## Ownership
+## NVIDIA AI Ecosystem
 
-| Area | Owner |
-|---|---|
-| demo_repo, app.py, logs, tickets | Person A |
-| agent.py, tools.py, prompt.py, model config | Person B |
+- **NVIDIA NIM** — Inference endpoint serving the model via OpenAI-compatible API
+- **NVIDIA Nemotron** (`nvidia/nemotron-3-super-120b-a12b`) — Reasoning model powering the agent's tool-calling loop and report generation

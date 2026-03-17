@@ -1122,8 +1122,3 @@ with chat_col:
                 revert_fix()
                 st.rerun()
 
-    # Follow-up chat input
-    if st.session_state.investigation_started:
-        if follow_up := st.chat_input("Ask a follow-up question..."):
-            st.session_state.messages.append({"role": "user", "content": follow_up})
-            st.rerun()
