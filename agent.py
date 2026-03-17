@@ -5,10 +5,28 @@ Uses NVIDIA NIM / Nemotron via the OpenAI-compatible SDK.
 
 import json
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
 from tools import call_tool, TOOL_DEFINITIONS
+
+# Pre-load ticket and log so the agent doesn't waste iterations reading them
+_REPO = Path(__file__).parent / "demo_repo"
+_PRELOADED_CONTEXT = ""
+try:
+    _ticket = (_REPO / "tickets" / "ticket_001.md").read_text()
+    _log    = (_REPO / "logs" / "fault_log.txt").read_text()
+    _PRELOADED_CONTEXT = f"""\
+--- PRELOADED: Bug Ticket (ticket_001.md) ---
+{_ticket}
+
+--- PRELOADED: Fault Log (fault_log.txt) ---
+{_log}
+
+"""
+except FileNotFoundError:
+    pass
 
 load_dotenv()
 
@@ -23,6 +41,7 @@ client = OpenAI(
 
 MODEL = "nvidia/nemotron-3-super-120b-a12b"
 MAX_ITERATIONS = 8
+TEMPERATURE = 0.2   # Lower than default 1.0 — more deterministic structured output
 
 # ---------------------------------------------------------------------------
 # System prompt
@@ -38,12 +57,12 @@ INVESTIGATION PROCEDURE
 Follow these steps in order:
 
 1. Call list_repo_files() first to understand what files exist.
-2. Read tickets/ and logs/ files to fully understand the reported symptoms.
-3. Search for key terms related to the failure domain:
-   - For heartbeat/reconnect/timeout issues: search "torque_inhibit", "heartbeat", "inhibit"
-   - Read bms_interface.c, safety_checker.c, and torque_controller.c as your primary suspects.
-4. Read at least 3 source files before drawing any conclusions.
+2. The bug ticket and fault log are ALREADY provided to you above — do NOT read them again via read_file().
+   Skip directly to reading source files.
+3. Read bms_interface.c, safety_checker.c, and torque_controller.c — these are your primary suspects.
+4. Read at least 3 source .c files before drawing any conclusions.
 5. Once you have concrete evidence from code and logs, write the final report.
+   You MUST write the report before using all available iterations.
 
 BEHAVIORAL RULES
 - Be concrete, never vague. Write "safety_checker.c:safety_check_periodic() sets torque_inhibit = true" \
@@ -103,7 +122,7 @@ def run_agent(user_prompt: str):
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_prompt},
+        {"role": "user", "content": _PRELOADED_CONTEXT + user_prompt},
     ]
 
     for iteration in range(MAX_ITERATIONS):
@@ -112,7 +131,7 @@ def run_agent(user_prompt: str):
             messages=messages,
             tools=TOOL_DEFINITIONS,
             tool_choice="auto",
-            temperature=1.0,
+            temperature=TEMPERATURE,
             top_p=0.95,
         )
 
@@ -167,21 +186,33 @@ def run_agent(user_prompt: str):
                 "content": result_str,
             })
 
-    # Exhausted iterations — ask model for best-effort report
+    # Exhausted iterations — ask model for best-effort report (no tools available)
     messages.append({
         "role": "user",
         "content": (
-            "You have reached the investigation limit. "
-            "Based on everything gathered so far, write the full triage report now."
+            "STOP using tools. You have reached the investigation limit. "
+            "Write the full triage report now using ONLY the information already gathered. "
+            "Do not emit any tool calls or XML. Output only the markdown report."
         ),
     })
 
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=messages,
-        temperature=1.0,
-        top_p=0.95,
-    )
+    for _attempt in range(2):
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            temperature=TEMPERATURE,
+            top_p=0.95,
+        )
+        report = response.choices[0].message.content or ""
+        if "<tool_call>" not in report and "<function=" not in report:
+            break
+        # Model still output tool XML — push it back and retry once
+        messages.append({"role": "assistant", "content": report})
+        messages.append({
+            "role": "user",
+            "content": (
+                "That response contained tool calls. Output the triage report in plain markdown ONLY."
+            ),
+        })
 
-    report = response.choices[0].message.content or "Agent exhausted iterations without producing a report."
-    return {"report": report, "tool_log": tool_log}
+    return {"report": report or "Agent exhausted iterations without producing a report.", "tool_log": tool_log}
