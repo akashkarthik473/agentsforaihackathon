@@ -945,22 +945,20 @@ with chat_col:
                     thinking_container = st.expander("🔍 Agent Investigation Steps", expanded=True)
                     answer_container = st.empty()
 
-                    with st.spinner("Agent is analyzing the repository..."):
-                        from agent import run_agent
-                        result = run_agent(prompt)
-
-                    # Clear progress and show tool log
-                    progress_placeholder.empty()
-
-                    for tc in result["tool_log"]:
+                    def show_tool_call(tc):
+                        args_str = ", ".join(
+                            f"{k}={v}" for k, v in tc["args"].items()
+                        ) if tc["args"] else ""
                         with thinking_container:
-                            args_str = ", ".join(
-                                f"{k}={v}" for k, v in tc["args"].items()
-                            ) if tc["args"] else ""
-                            st.markdown(f"`{tc['tool']}` ({args_str})")
+                            st.markdown(f"**{tc['tool']}**({args_str})")
                             if tc.get("result_preview"):
                                 st.code(tc["result_preview"], language="text")
 
+                    with st.spinner("Agent is analyzing the repository..."):
+                        from agent import run_agent
+                        result = run_agent(prompt, on_tool_call=show_tool_call)
+
+                    progress_placeholder.empty()
                     answer_container.markdown(result["report"])
 
                     st.session_state.messages.append({
