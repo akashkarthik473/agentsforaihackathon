@@ -2,6 +2,7 @@ import streamlit as st
 from pathlib import Path
 import requests
 import time
+import difflib
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -598,6 +599,8 @@ if "investigation_started" not in st.session_state:
     st.session_state.investigation_started = False
 if "selected_file" not in st.session_state:
     st.session_state.selected_file = None
+if "fix_applied" not in st.session_state:
+    st.session_state.fix_applied = False
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -606,6 +609,131 @@ DEMO_ROOT = Path("demo_repo")
 TICKET_PATH = DEMO_ROOT / "tickets" / "ticket_001.md"
 LOG_PATH = DEMO_ROOT / "logs" / "fault_log.txt"
 KEY_FILES = {"bms_interface.c", "safety_checker.c", "torque_controller.c"}
+
+# ---------------------------------------------------------------------------
+# Original file contents (for revert)
+# ---------------------------------------------------------------------------
+ORIGINAL_SAFETY_CHECKER_H = (DEMO_ROOT / "safety_checker.h").read_text(encoding="utf-8")
+ORIGINAL_SAFETY_CHECKER_C = (DEMO_ROOT / "safety_checker.c").read_text(encoding="utf-8")
+ORIGINAL_BMS_INTERFACE_C = (DEMO_ROOT / "bms_interface.c").read_text(encoding="utf-8")
+
+# ---------------------------------------------------------------------------
+# Patched file contents
+# ---------------------------------------------------------------------------
+PATCHED_SAFETY_CHECKER_H = """\
+#ifndef SAFETY_CHECKER_H
+#define SAFETY_CHECKER_H
+
+#include <stdbool.h>
+
+void safety_set_bms_timeout_fault(void);
+void safety_clear_bms_timeout_fault(void);
+bool safety_is_torque_inhibited(void);
+void safety_tick(void);
+
+#endif
+"""
+
+PATCHED_SAFETY_CHECKER_C = """\
+// safety_checker.c
+// Manages safety-critical fault latches for the motor controller.
+// Owner: firmware safety team
+// Last reviewed: 2024-01-15
+
+#include "safety_checker.h"
+#include <stdio.h>
+
+static bool torque_inhibit = false;
+static int fault_count = 0;
+
+void safety_set_bms_timeout_fault(void) {
+    torque_inhibit = true;
+    fault_count++;
+    printf("[SAFETY] torque_inhibit=1 reason=BMS_TIMEOUT\\n");
+}
+
+void safety_clear_bms_timeout_fault(void) {
+    torque_inhibit = false;
+    printf("[SAFETY] torque_inhibit=0 reason=BMS_RESTORED\\n");
+}
+
+bool safety_is_torque_inhibited(void) {
+    return torque_inhibit;
+}
+
+void safety_tick(void) {
+    // placeholder for periodic safety checks
+    // overvoltage, overtemp, etc. would go here
+}
+"""
+
+PATCHED_BMS_INTERFACE_C = """\
+// bms_interface.c
+// Tracks BMS heartbeat presence over CAN.
+// When heartbeat is lost, triggers safety fault.
+// When heartbeat returns, marks recovery.
+
+#include "bms_interface.h"
+#include "safety_checker.h"
+#include <stdio.h>
+
+static bool heartbeat_present = false;
+static int timeout_counter = 0;
+
+#define BMS_TIMEOUT_THRESHOLD 50  // ticks
+
+void bms_on_heartbeat_timeout(void) {
+    heartbeat_present = false;
+    safety_set_bms_timeout_fault();
+    printf("[BMS] heartbeat lost, safety fault raised\\n");
+}
+
+void bms_on_heartbeat_received(void) {
+    heartbeat_present = true;
+    timeout_counter = 0;
+    safety_clear_bms_timeout_fault();
+    printf("[BMS] heartbeat restored\\n");
+}
+
+bool bms_is_heartbeat_present(void) {
+    return heartbeat_present;
+}
+
+void bms_tick(void) {
+    if (!heartbeat_present) {
+        timeout_counter++;
+        if (timeout_counter >= BMS_TIMEOUT_THRESHOLD) {
+            bms_on_heartbeat_timeout();
+            timeout_counter = 0;  // prevent re-trigger spam
+        }
+    }
+}
+"""
+
+PATCH_FILES = {
+    "safety_checker.h": (ORIGINAL_SAFETY_CHECKER_H, PATCHED_SAFETY_CHECKER_H),
+    "safety_checker.c": (ORIGINAL_SAFETY_CHECKER_C, PATCHED_SAFETY_CHECKER_C),
+    "bms_interface.c": (ORIGINAL_BMS_INTERFACE_C, PATCHED_BMS_INTERFACE_C),
+}
+
+
+def apply_fix():
+    for fname, (_, patched) in PATCH_FILES.items():
+        (DEMO_ROOT / fname).write_text(patched, encoding="utf-8")
+    st.session_state.fix_applied = True
+
+
+def revert_fix():
+    for fname, (original, _) in PATCH_FILES.items():
+        (DEMO_ROOT / fname).write_text(original, encoding="utf-8")
+    st.session_state.fix_applied = False
+
+
+def make_diff(fname, original, patched):
+    orig_lines = original.splitlines(keepends=True)
+    patch_lines = patched.splitlines(keepends=True)
+    diff = difflib.unified_diff(orig_lines, patch_lines, fromfile=f"a/{fname}", tofile=f"b/{fname}")
+    return "".join(diff)
 
 
 def get_repo_files():
@@ -621,6 +749,8 @@ def reset():
     st.session_state.messages = []
     st.session_state.investigation_started = False
     st.session_state.selected_file = None
+    if st.session_state.fix_applied:
+        revert_fix()
 
 
 def fetch_github_issue(url: str):
@@ -967,6 +1097,29 @@ with chat_col:
                         "tool_calls": result["tool_log"],
                     })
 
+                st.rerun()
+
+    # -------------------------------------------------------------------
+    # Apply Fix / Revert buttons + diff view
+    # -------------------------------------------------------------------
+    if st.session_state.investigation_started and st.session_state.messages:
+        st.divider()
+
+        if not st.session_state.fix_applied:
+            if st.button("Apply Fix", type="primary", use_container_width=True):
+                apply_fix()
+                st.rerun()
+        else:
+            st.success("Patch applied to 3 files: safety_checker.h, safety_checker.c, bms_interface.c")
+
+            for fname, (original, patched) in PATCH_FILES.items():
+                diff_text = make_diff(fname, original, patched)
+                if diff_text:
+                    with st.expander(f"Diff: {fname}", expanded=True):
+                        st.code(diff_text, language="diff")
+
+            if st.button("Revert Fix", use_container_width=True):
+                revert_fix()
                 st.rerun()
 
     # Follow-up chat input
